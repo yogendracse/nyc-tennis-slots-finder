@@ -1,9 +1,9 @@
-import { Court } from '@/types';
+import { Park } from '@/types';
 
 class Store {
   private static instance: Store;
-  private lastScrapedData: Court[] | null = null;
-  private lastScrapedTime: Date | null = null;
+  private lastScrapedData: Park[] | null = null;
+  private lastUpdateTime: Date | null = null;
 
   private constructor() {}
 
@@ -14,15 +14,15 @@ class Store {
     return Store.instance;
   }
 
-  setScrapedData(data: Court[]) {
+  setScrapedData(data: Park[]): void {
     this.lastScrapedData = data;
-    this.lastScrapedTime = new Date();
+    this.lastUpdateTime = new Date();
   }
 
-  getLastScrapedData(): { data: Court[] | null; timestamp: Date | null } {
+  getScrapedData(): { data: Park[] | null; lastUpdate: Date | null } {
     return {
       data: this.lastScrapedData,
-      timestamp: this.lastScrapedTime
+      lastUpdate: this.lastUpdateTime
     };
   }
 }

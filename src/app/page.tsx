@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useState, useRef } from 'react';
 import { format } from 'date-fns';
 import DatePicker from 'react-datepicker';
@@ -7,7 +8,16 @@ import "react-datepicker/dist/react-datepicker.css";
 import { Park } from '@/types';
 import { MagnifyingGlassIcon, ClockIcon, MapPinIcon, ArrowPathIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
-import ParksMap from '@/components/ParksMap';
+
+// Dynamic import of ParksMap with no SSR
+const ParksMap = dynamic(() => import('@/components/ParksMap'), {
+  ssr: false, // This will only render the map on the client side
+  loading: () => (
+    <div className="w-full h-[400px] rounded-lg overflow-hidden shadow-lg bg-gray-100 flex items-center justify-center">
+      <div className="text-gray-500">Loading map...</div>
+    </div>
+  ),
+});
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -177,7 +187,6 @@ export default function Home() {
             </h2>
             <ParksMap
               parks={parks}
-              selectedDate={selectedDate}
               onParkClick={handleParkClick}
             />
           </div>
