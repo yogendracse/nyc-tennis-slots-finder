@@ -15,6 +15,8 @@ interface SlotSummary {
 }
 
 function getSlotSummary(slots: TimeSlot[]): SlotSummary {
+  console.log('Calculating summary for slots:', slots);
+  
   return slots.reduce((summary, slot) => {
     // Parse time like "6:00 a.m." or "2:30 p.m."
     const timeComponents = slot.time.toLowerCase().split(' ');
@@ -30,13 +32,18 @@ function getSlotSummary(slots: TimeSlot[]): SlotSummary {
       hours = 0;
     }
 
+    console.log(`Processing slot: ${slot.time} -> ${hours}:${minutes} (${period})`);
+
     // Classify slots
     if (hours < 12) {
       summary.morning++;
+      console.log(`Classified as morning: ${slot.time}`);
     } else if (hours < 17) {
       summary.afternoon++;
+      console.log(`Classified as afternoon: ${slot.time}`);
     } else {
       summary.evening++;
+      console.log(`Classified as evening: ${slot.time}`);
     }
     summary.total++;
     
@@ -44,9 +51,9 @@ function getSlotSummary(slots: TimeSlot[]): SlotSummary {
   }, { total: 0, morning: 0, afternoon: 0, evening: 0 });
 }
 
-export default function ParksMap({ parks, onParkClick }: ParksMapProps) {
+export default function ParksMap({ parks, selectedDate, onParkClick }: ParksMapProps) {
   const [mounted, setMounted] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [expandedParkId, setExpandedParkId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -84,6 +91,16 @@ export default function ParksMap({ parks, onParkClick }: ParksMapProps) {
 
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
 
+  const handleMarkerClick = (parkId: string) => {
+    if (expandedParkId === parkId) {
+      // If marker is already expanded, clicking again will scroll to details
+      onParkClick?.(parkId);
+    } else {
+      // First click just expands the popup
+      setExpandedParkId(parkId);
+    }
+  };
+
   return (
     <div className="relative w-full h-[400px] rounded-lg overflow-hidden shadow-lg">
       <MapContainer
@@ -106,7 +123,7 @@ export default function ParksMap({ parks, onParkClick }: ParksMapProps) {
               position={[park.latitude, park.longitude]}
               icon={customIcon}
               eventHandlers={{
-                click: () => onParkClick?.(park.id),
+                click: () => handleMarkerClick(park.id),
               }}
             >
               <Popup>

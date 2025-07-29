@@ -27,6 +27,7 @@ export default function Home() {
   const [selectedParkId, setSelectedParkId] = useState<string | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
 
   const handleDateChange = (date: Date | null) => {
     if (date) {
@@ -40,6 +41,12 @@ export default function Home() {
     const parkElement = document.getElementById(`park-${parkId}`);
     if (parkElement) {
       parkElement.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const scrollToMap = () => {
+    if (mapRef.current) {
+      mapRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -181,7 +188,7 @@ export default function Home() {
 
         {/* Map Section */}
         {parks.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-8" ref={mapRef}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Tennis Courts Locations
             </h2>
@@ -256,6 +263,15 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
+                <button
+                  onClick={scrollToMap}
+                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors group"
+                  title="Go back to map"
+                  aria-label="Go back to map"
+                >
+                  <MapPinIcon className="h-5 w-5" />
+                  <span className="hidden group-hover:inline">View on map</span>
+                </button>
               </div>
             );
           }).filter(Boolean)}
