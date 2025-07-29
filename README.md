@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NYC Tennis Slots Finder
 
-## Getting Started
+A web application that helps you find available tennis court slots across NYC parks in one place.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- 🎾 Real-time availability checking for NYC public tennis courts
+- 📅 Date-based slot searching
+- 🗺️ Interactive map showing all tennis court locations
+- 📊 Time-based slot categorization (Morning/Afternoon/Evening)
+- 🔄 Cache system for quick data retrieval
+- 📱 Responsive design for all devices
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Map**: OpenStreetMap with react-leaflet
+- **Data Fetching**: Python with BeautifulSoup4
+- **Styling**: Tailwind CSS, HeadlessUI
+- **Date Handling**: date-fns
+- **Icons**: Heroicons
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Prerequisites
 
-## Learn More
+- Node.js 18+ and npm
+- Python 3.8+
+- pip (Python package manager)
 
-To learn more about Next.js, take a look at the following resources:
+## Installation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/nyc-tennis-slots-finder.git
+   cd nyc-tennis-slots-finder
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2. Install Node.js dependencies:
+   ```bash
+   npm install
+   ```
 
-## Deploy on Vercel
+3. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Create a `.env.local` file in the root directory:
+   ```env
+   NODE_ENV=development
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Running Locally
+
+1. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+2. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Data Updates
+
+The application uses two CSV files:
+- `nyc_tennis_courts.csv`: Static data about tennis court locations (included in repo)
+- `nyc_tennis_court_availability.csv`: Dynamic availability data (generated when searching)
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## Security
+
+- Rate limiting implemented for API routes
+- Security headers configured
+- Input validation and sanitization
+- Error handling and logging
+- CORS protection
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- NYC Parks Department for providing the tennis court reservation system
+- OpenStreetMap contributors for map data
