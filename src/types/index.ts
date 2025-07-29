@@ -1,7 +1,20 @@
 export interface TimeSlot {
   time: string;
   court: string;
-  reservationLink: string;
+  status?: string;
+  reservationLink?: string;
+}
+
+export interface DaySchedule {
+  date: string;
+  slots: TimeSlot[];
+}
+
+export interface TennisCourt {
+  id: string;
+  name: string;
+  location: string;
+  schedules: DaySchedule[];
 }
 
 export interface Park {

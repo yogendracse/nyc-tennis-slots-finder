@@ -1,175 +1,88 @@
+import { TimeSlot, Park, ScrapeResult, DaySchedule, TennisCourt } from '@/types';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { Park, DaySchedule, TennisCourt, TimeSlot, ScrapeResult } from '@/types';
 
-const BASE_URL = 'https://www.nycgovparks.org/tennisreservation';
-const PARK_IDS = Array.from({ length: 13 }, (_, i) => i + 1); // 1 to 13
-
-// Add headers to mimic a browser request
-const axiosInstance = axios.create({
-  headers: {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1',
-  },
-});
-
-async function scrapeParkData(parkId: number): Promise<Park | null> {
+async function fetchCourtData(courtId: string): Promise<TennisCourt | null> {
   try {
-    const url = `${BASE_URL}/availability/${parkId}`;
-    console.log(`[Scraper] Attempting to fetch park ${parkId} from: ${url}`);
-    
-    const response = await axiosInstance.get(url);
-    console.log(`[Scraper] Response status for park ${parkId}:`, response.status);
-    
-    if (response.status !== 200) {
-      console.error(`[Scraper] Non-200 status code for park ${parkId}:`, response.status);
-      return null;
-    }
-
-    const $ = cheerio.load(response.data);
-    console.log(`[Scraper] Successfully loaded HTML for park ${parkId}`);
-    
-    // Log the entire HTML for debugging
-    console.log(`[Scraper] HTML content for park ${parkId}:`, response.data);
-    
-    // Get park details
-    const locationDetails = $('#location_details');
-    const parkName = locationDetails.find('h2').text().trim();
-    const location = locationDetails.find('p').text().trim();
-    
-    console.log(`[Scraper] Park details:`, { parkId, parkName, location });
-    
-    if (!parkName) {
-      console.log(`[Scraper] No park name found for ID ${parkId}, skipping...`);
-      return null;
-    }
-
-    // Get schedule tabs
-    const schedules: DaySchedule[] = [];
-    const tabsCount = $('.nav-tabs li a').length;
-    console.log(`[Scraper] Found ${tabsCount} schedule tabs`);
-
-    $('.nav-tabs li a').each((_, tab) => {
-      const href = $(tab).attr('href');
-      const displayDate = $(tab).html() || '';
-      console.log(`[Scraper] Processing tab:`, { href, displayDate });
-
-      if (href && href.startsWith('#')) {
-        const date = href.substring(1); // Remove '#' from href
-        
-        // Get court data for this date
-        const courts: TennisCourt[] = [];
-        const tabContent = $(`#${date}`);
-        const tableRows = tabContent.find('table tr').length;
-        console.log(`[Scraper] Found ${tableRows} rows in table for date ${date}`);
-        
-        // Process each court row
-        tabContent.find('table tr').each((rowIndex, row) => {
-          if (rowIndex === 0) return; // Skip header row
-          
-          const courtNumber = $(row).find('td:first').text().trim();
-          const slots: TimeSlot[] = [];
-          
-          // Process each time slot in the row
-          $(row).find('td:not(:first)').each((_, cell) => {
-            const $cell = $(cell);
-            let status: TimeSlot['status'] = 'unavailable';
-            let reservationUrl: string | undefined;
-            
-            // Log cell classes for debugging
-            const cellClasses = $cell.attr('class');
-            console.log(`[Scraper] Cell classes:`, cellClasses);
-            
-            if ($cell.hasClass('status2')) {
-              status = 'available';
-              const reserveLink = $cell.find('a.assign_someone').attr('href');
-              if (reserveLink) {
-                reservationUrl = `https://www.nycgovparks.org${reserveLink}`;
-              }
-            } else if ($cell.hasClass('status3')) {
-              status = 'booked';
-            }
-            
-            const time = $cell.find('span').text().trim() || $cell.text().trim();
-            if (time && time !== 'Not Available' && time !== 'Booked') {
-              slots.push({
-                time,
-                status,
-                ...(reservationUrl && { reservationUrl })
-              });
-              console.log(`[Scraper] Found slot:`, { time, status, reservationUrl });
-            }
-          });
-          
-          if (courtNumber && slots.length > 0) {
-            courts.push({
-              id: `${parkId}-${courtNumber}`,
-              courtNumber,
-              slots
-            });
-            console.log(`[Scraper] Added court:`, { courtNumber, slotsCount: slots.length });
-          }
-        });
-        
-        if (courts.length > 0) {
-          schedules.push({
-            date,
-            displayDate,
-            courts
-          });
-          console.log(`[Scraper] Added schedule:`, { date, courtsCount: courts.length });
-        }
+    const url = `https://www.nycgovparks.org/tennisreservation/availability/${courtId}`;
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     });
 
-    const result = {
-      id: parkId.toString(),
-      name: parkName,
+    const $ = cheerio.load(response.data);
+    const name = $('h1').text().trim();
+    const location = $('#location_details').text().trim();
+
+    const schedules: DaySchedule[] = [];
+    $('.tab-pane').each((_, tab) => {
+      const date = $(tab).attr('id') || '';
+      const slots: TimeSlot[] = [];
+
+      $(tab).find('tbody tr').each((_, row) => {
+        const time = $(row).find('td:first-child').text().trim();
+        $(row).find('td:not(:first-child)').each((_, cell) => {
+          const status = $(cell).text().trim();
+          const reservationLink = $(cell).find('a').attr('href');
+          const court = $(cell).closest('table').find('th').eq($(cell).index()).text().trim();
+
+          slots.push({
+            time,
+            court,
+            status,
+            reservationLink: reservationLink ? `https://www.nycgovparks.org${reservationLink}` : undefined
+          });
+        });
+      });
+
+      schedules.push({ date, slots });
+    });
+
+    return {
+      id: courtId,
+      name,
       location,
       schedules
     };
-
-    console.log(`[Scraper] Final park data:`, JSON.stringify(result, null, 2));
-    return result;
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.error(`[Scraper] Axios error for park ${parkId}:`, {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        headers: error.response?.headers,
-        data: error.response?.data
-      });
-    } else {
-      console.error(`[Scraper] Error scraping park ${parkId}:`, error);
-    }
+    console.error(`Error fetching court ${courtId}:`, error);
     return null;
   }
 }
 
-export async function scrapeAllParks(): Promise<ScrapeResult> {
+export async function scrapeAllCourts(): Promise<ScrapeResult> {
   try {
-    console.log('[Scraper] Starting to scrape all parks...');
+    const courts: TennisCourt[] = [];
     
-    // Skip Central Park (ID: 12) for now as it has a different structure
-    const parkIds = PARK_IDS.filter(id => id !== 12);
-    console.log('[Scraper] Will scrape these park IDs:', parkIds);
-    
-    const parkPromises = parkIds.map(id => scrapeParkData(id));
-    const parks = (await Promise.all(parkPromises))
-      .filter((park): park is Park => park !== null);
-    
-    console.log(`[Scraper] Successfully scraped ${parks.length} parks`);
-    console.log('[Scraper] All parks data:', JSON.stringify(parks, null, 2));
-    
+    // Fetch data for courts 1-13
+    for (let i = 1; i <= 13; i++) {
+      const court = await fetchCourtData(i.toString());
+      if (court) {
+        courts.push(court);
+      }
+    }
+
+    // Convert to Park format
+    const parks: Park[] = courts.map(court => ({
+      id: court.id,
+      name: court.name,
+      details: court.location,
+      address: '', // Will be filled from CSV
+      latitude: 0, // Will be filled from CSV
+      longitude: 0, // Will be filled from CSV
+      availableSlots: court.schedules.reduce((acc, schedule) => {
+        acc[schedule.date] = schedule.slots.filter(slot => slot.status === 'Reserve this time');
+        return acc;
+      }, {} as { [key: string]: TimeSlot[] })
+    }));
+
     return {
       success: true,
-      parks
+      parks,
+      timestamp: new Date()
     };
   } catch (error) {
-    console.error('[Scraper] Error in scrapeAllParks:', error);
     return {
       success: false,
       parks: [],
