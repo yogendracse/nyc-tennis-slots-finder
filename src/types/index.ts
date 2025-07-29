@@ -38,5 +38,6 @@ export interface ScrapeResult {
 
 export interface ParksMapProps {
   parks: Park[];
+  selectedDate: Date;
   onParkClick?: (parkId: string) => void;
 } 
