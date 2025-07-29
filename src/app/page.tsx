@@ -187,7 +187,6 @@ export default function Home() {
             </h2>
             <ParksMap
               parks={parks}
-              selectedDate={selectedDate}
               onParkClick={handleParkClick}
             />
           </div>

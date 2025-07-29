@@ -4,12 +4,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Park } from '@/types';
-
-interface ParksMapProps {
-  parks: Park[];
-  onParkClick?: (parkId: string) => void;
-}
+import { Park, ParksMapProps } from '@/types';
 
 export default function ParksMap({ parks, onParkClick }: ParksMapProps) {
   const [mounted, setMounted] = useState(false);

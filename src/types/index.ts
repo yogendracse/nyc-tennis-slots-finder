@@ -34,4 +34,9 @@ export interface ScrapeResult {
   parks: Park[];
   timestamp?: Date;
   error?: string;
+}
+
+export interface ParksMapProps {
+  parks: Park[];
+  onParkClick?: (parkId: string) => void;
 } 
