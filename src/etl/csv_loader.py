@@ -92,6 +92,11 @@ def validate_court_data(df):
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
 
+    # Prevent test data from being loaded into production
+    test_data = df[df['park_name'].str.contains('Test Park', case=False, na=False)]
+    if not test_data.empty:
+        raise ValueError(f"Test data detected in production load: {test_data['park_name'].tolist()}")
+
     # Validate coordinates
     invalid_coords = df[
         (df['lat'].astype(float) < -90) | 
