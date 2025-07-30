@@ -69,6 +69,42 @@ The application uses a three-layer data architecture:
    npm install
    ```
 
+## Branching Strategy
+
+The project follows a three-tier branching strategy:
+
+1. Development (`dev`)
+   - All feature branches merge into `dev` first
+   - Feature branches should follow naming: `feature/description`
+   - Bug fix branches should follow naming: `fix/description`
+   - Initial testing and code review happens here
+
+2. Quality Assurance (`qa`)
+   - Changes are promoted from `dev` to `qa` using `promote/dev-to-qa` branch
+   - QA team performs thorough testing
+   - No direct merges to `qa` except through promotion
+
+3. Production (`main`)
+   - Only tested and approved code from `qa` gets merged to `main`
+   - Represents production-ready code
+   - Protected branch - requires approvals
+
+### Branch Naming Conventions
+- Features: `feature/description`
+- Bug Fixes: `fix/description`
+- Promotions: `promote/source-to-target`
+
+### Workflow Example
+```
+feature/add-map → dev → qa → main
+       ↑          ↑    ↑     ↑
+    Development   |    |    Production
+                  |    |
+                  |   QA Testing
+                  |
+              Integration Testing
+```
+
 2. Set up PostgreSQL database:
    ```bash
    createdb nyc_tennis
