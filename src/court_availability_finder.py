@@ -8,6 +8,7 @@ from pathlib import Path
 # Constants
 BASE_URL = "https://www.nycgovparks.org/tennisreservation"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "court_availability", "raw_files")
+DEFAULT_COURTS_FILE = os.path.join(os.path.dirname(__file__), "..", "nyc_tennis_courts.csv")
 
 def get_court_id_from_url(url: str) -> str:
     """Extract court ID from facility URL."""
@@ -96,7 +97,7 @@ def main() -> str:
     date_str = tomorrow.strftime('%Y-%m-%d')
     
     # Get court IDs from CSV
-    courts_file = os.path.join(os.path.dirname(__file__), "..", "nyc_tennis_courts.csv")
+    courts_file = os.getenv('COURTS_FILE', DEFAULT_COURTS_FILE)
     courts_df = pd.read_csv(courts_file)
     
     # Fetch availability for each court
