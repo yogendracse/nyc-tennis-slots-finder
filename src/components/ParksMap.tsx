@@ -1,11 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Park, ParksMapProps, TimeSlot } from '@/types';
 import { format } from 'date-fns';
+import { TennisCourt, CourtAvailability } from '@/utils/database';
+
+// Import L only on client side
+let L: any;
+if (typeof window !== 'undefined') {
+  L = require('leaflet');
+}
+
+interface TimeSlot {
+  time: string;
+  court: string;
+  status: string;
+  reservation_link?: string;
+}
 
 interface SlotSummary {
   total: number;
@@ -14,9 +27,13 @@ interface SlotSummary {
   evening: number;   // 17:00 onwards
 }
 
+interface ParksMapProps {
+  courts: TennisCourt[];
+  selectedDate: Date;
+  onParkClick: (courtId: string) => void;
+}
+
 function getSlotSummary(slots: TimeSlot[]): SlotSummary {
-  console.log('Calculating summary for slots:', slots);
-  
   return slots.reduce((summary, slot) => {
     // Parse time like "6:00 a.m." or "2:30 p.m."
     const timeComponents = slot.time.toLowerCase().split(' ');
@@ -32,18 +49,13 @@ function getSlotSummary(slots: TimeSlot[]): SlotSummary {
       hours = 0;
     }
 
-    console.log(`Processing slot: ${slot.time} -> ${hours}:${minutes} (${period})`);
-
     // Classify slots
     if (hours < 12) {
       summary.morning++;
-      console.log(`Classified as morning: ${slot.time}`);
     } else if (hours < 17) {
       summary.afternoon++;
-      console.log(`Classified as afternoon: ${slot.time}`);
     } else {
       summary.evening++;
-      console.log(`Classified as evening: ${slot.time}`);
     }
     summary.total++;
     
@@ -51,59 +63,103 @@ function getSlotSummary(slots: TimeSlot[]): SlotSummary {
   }, { total: 0, morning: 0, afternoon: 0, evening: 0 });
 }
 
-export default function ParksMap({ parks, selectedDate, onParkClick }: ParksMapProps) {
+// Create a dynamic map component that only loads on the client side
+const Map = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer), {
+  ssr: false,
+});
+
+// Default coordinates (Central Park Tennis Center)
+const DEFAULT_CENTER = [40.7831, -73.9712];
+
+export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMapProps) {
   const [mounted, setMounted] = useState(false);
-  const [expandedParkId, setExpandedParkId] = useState<string | null>(null);
+  const [expandedCourtId, setExpandedCourtId] = useState<string | null>(null);
+  const [availabilityData, setAvailabilityData] = useState<Record<string, TimeSlot[]>>({});
+  const [customIcon, setCustomIcon] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
+    // Initialize Leaflet icon only on client side
+    if (typeof window !== 'undefined') {
+      setCustomIcon(
+        new L.Icon({
+          iconUrl: '/tennis-marker.svg',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
+        })
+      );
+    }
   }, []);
 
   useEffect(() => {
-    // Fix Leaflet marker icon issue
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: '/marker-icon-2x.png',
-      iconUrl: '/marker-icon.png',
-      shadowUrl: '/marker-shadow.png',
-    });
-  }, []);
+    // Fetch availability data for all courts when selectedDate changes
+    const fetchAvailability = async () => {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const availabilityPromises = courts.map(async (court) => {
+        const response = await fetch(`/api/courts?courtId=${court.court_id}&date=${dateStr}`);
+        const data: CourtAvailability[] = await response.json();
+        return {
+          courtId: court.court_id,
+          slots: data.map(slot => ({
+            time: slot.time,
+            court: slot.court,
+            status: slot.status,
+            reservation_link: slot.reservation_link
+          }))
+        };
+      });
 
-  // Calculate center of all parks
-  const center = parks.length > 0 ? parks.reduce(
-    (acc, park) => {
-      acc[0] += park.latitude;
-      acc[1] += park.longitude;
+      const results = await Promise.all(availabilityPromises);
+      const availabilityMap = results.reduce((acc, { courtId, slots }) => {
+        acc[courtId] = slots;
+        return acc;
+      }, {} as Record<string, TimeSlot[]>);
+      
+      setAvailabilityData(availabilityMap);
+    };
+
+    if (courts.length > 0) {
+      fetchAvailability();
+    }
+  }, [selectedDate, courts]);
+
+  // Calculate center of all courts with valid coordinates
+  const center = courts.length > 0 ? courts.reduce(
+    (acc, court) => {
+      if (isFinite(court.lat) && isFinite(court.lon)) {
+        acc[0] += court.lat;
+        acc[1] += court.lon;
+        acc[2]++; // Count valid coordinates
+      }
       return acc;
     },
-    [0, 0]
-  ).map(coord => coord / parks.length) : [40.7831, -73.9712];
+    [0, 0, 0]
+  ).map((val, idx) => idx < 2 ? (val / (courts.length || 1)) || DEFAULT_CENTER[idx] : val) : DEFAULT_CENTER;
 
-  // Custom marker icon
-  const customIcon = new L.Icon({
-    iconUrl: '/tennis-marker.svg',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  });
+  if (!mounted || !customIcon) return null;
 
-  if (!mounted) return null;
-
-  const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-
-  const handleMarkerClick = (parkId: string) => {
-    if (expandedParkId === parkId) {
+  const handleMarkerClick = (courtId: string) => {
+    if (expandedCourtId === courtId) {
       // If marker is already expanded, clicking again will scroll to details
-      onParkClick?.(parkId);
+      onParkClick(courtId);
     } else {
       // First click just expands the popup
-      setExpandedParkId(parkId);
+      setExpandedCourtId(courtId);
     }
   };
 
+  // Filter out courts with invalid coordinates
+  const validCourts = courts.filter(court => 
+    isFinite(court.lat) && 
+    isFinite(court.lon) && 
+    Math.abs(court.lat) <= 90 && 
+    Math.abs(court.lon) <= 180
+  );
+
   return (
     <div className="relative w-full h-[400px] rounded-lg overflow-hidden shadow-lg">
-      <MapContainer
+      <Map
         center={[center[0], center[1]]}
         zoom={12}
         className="h-full w-full"
@@ -113,23 +169,23 @@ export default function ParksMap({ parks, selectedDate, onParkClick }: ParksMapP
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {parks.map((park) => {
-          const dateSlots = park.availableSlots[selectedDateStr] || [];
-          const summary = getSlotSummary(dateSlots);
+        {validCourts.map((court) => {
+          const slots = availabilityData[court.court_id] || [];
+          const summary = getSlotSummary(slots);
 
           return (
             <Marker
-              key={park.id}
-              position={[park.latitude, park.longitude]}
+              key={court.court_id}
+              position={[court.lat, court.lon]}
               icon={customIcon}
               eventHandlers={{
-                click: () => handleMarkerClick(park.id),
+                click: () => handleMarkerClick(court.court_id),
               }}
             >
               <Popup>
                 <div className="p-3 min-w-[250px]">
-                  <h3 className="font-bold text-sm mb-2">{park.name}</h3>
-                  <p className="text-xs text-gray-600 mb-2">{park.address}</p>
+                  <h3 className="font-bold text-sm mb-2">{court.park_name}</h3>
+                  <p className="text-xs text-gray-600 mb-2">{court.address}</p>
                   
                   <div className="mt-3 space-y-1 text-sm">
                     <div className={`font-semibold ${summary.total > 0 ? 'text-green-600' : 'text-gray-600'}`}>
@@ -160,7 +216,7 @@ export default function ParksMap({ parks, selectedDate, onParkClick }: ParksMapP
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onParkClick?.(park.id);
+                      onParkClick(court.court_id);
                     }}
                     className="mt-3 w-full text-xs bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded transition-colors"
                   >
@@ -171,7 +227,7 @@ export default function ParksMap({ parks, selectedDate, onParkClick }: ParksMapP
             </Marker>
           );
         })}
-      </MapContainer>
+      </Map>
     </div>
   );
 } 
