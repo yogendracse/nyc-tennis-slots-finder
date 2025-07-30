@@ -16,6 +16,7 @@ Find available tennis courts across NYC parks in one place.
 - Filter by court type (Hard, Clay)
 - Direct links to reserve available slots
 
+
 ## Data Pipeline
 
 The application uses a three-layer data architecture:
@@ -68,6 +69,42 @@ The application uses a three-layer data architecture:
    npm install
    ```
 
+## Branching Strategy
+
+The project follows a three-tier branching strategy:
+
+1. Development (`dev`)
+   - All feature branches merge into `dev` first
+   - Feature branches should follow naming: `feature/description`
+   - Bug fix branches should follow naming: `fix/description`
+   - Initial testing and code review happens here
+
+2. Quality Assurance (`qa`)
+   - Changes are promoted from `dev` to `qa` using `promote/dev-to-qa` branch
+   - QA team performs thorough testing
+   - No direct merges to `qa` except through promotion
+
+3. Production (`main`)
+   - Only tested and approved code from `qa` gets merged to `main`
+   - Represents production-ready code
+   - Protected branch - requires approvals
+
+### Branch Naming Conventions
+- Features: `feature/description`
+- Bug Fixes: `fix/description`
+- Promotions: `promote/source-to-target`
+
+### Workflow Example
+```
+feature/add-map → dev → qa → main
+       ↑          ↑    ↑     ↑
+    Development   |    |    Production
+                  |    |
+                  |   QA Testing
+                  |
+              Integration Testing
+```
+
 2. Set up PostgreSQL database:
    ```bash
    createdb nyc_tennis
@@ -107,31 +144,28 @@ The project includes a comprehensive test suite for the ETL pipeline:
    python -m pytest tests/ --cov=src
    ```
 
-The test suite includes:
+### Test Data Handling
 
-- Unit tests for courts ETL:
-  - Loading data to staging
-  - Merging to DWH
-  - Handling updates
-  - NULL value handling
-  - Data validation
-  - Coordinate validation
-  - Court type validation
+The test suite uses a separate database (`nyc_tennis_test`) to prevent test data from affecting production data. Important notes:
 
-- Unit tests for availability ETL:
-  - File registration
-  - Loading to staging
-  - Merging to DWH
-  - Foreign key constraints
-  - Unique constraints
-  - Date/time validation
-  - File cleanup
+1. Test Data Isolation:
+   - All tests should use the test database defined in `tests/conftest.py`
+   - Never run tests against the production database
+   - Test data should be clearly marked (e.g., "Test Park", "123 Test St")
 
-- Error handling tests:
-  - Invalid CSV formats
-  - Invalid data values
-  - Transaction rollbacks
-  - Cleanup processes
+2. Data Cleanup:
+   If test data appears in production, use the cleanup script:
+   ```bash
+   ./scripts/fix_court_data.sh
+   ```
+   This script will:
+   - Remove any test data from both staging and production tables
+   - Reload the correct court data from `nyc_tennis_courts.csv`
+
+3. Data Validation:
+   - The ETL process validates court data before loading
+   - Test data patterns are detected and rejected in production
+   - Court IDs and coordinates are validated for accuracy
 
 The tests use a separate test database (`nyc_tennis_test`) to avoid affecting production data.
 
