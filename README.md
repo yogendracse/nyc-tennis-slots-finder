@@ -1,90 +1,140 @@
 # NYC Tennis Slots Finder
 
-A web application that helps you find available tennis court slots across NYC parks in one place.
-
-## Features
-
-- 🎾 Real-time availability checking for NYC public tennis courts
-- 📅 Date-based slot searching
-- 🗺️ Interactive map showing all tennis court locations
-- 📊 Time-based slot categorization (Morning/Afternoon/Evening)
-- 🔄 Cache system for quick data retrieval
-- 📱 Responsive design for all devices
+Find available tennis courts across NYC parks in one place.
 
 ## Tech Stack
 
-- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
-- **Map**: OpenStreetMap with react-leaflet
-- **Data Fetching**: Python with BeautifulSoup4
-- **Styling**: Tailwind CSS, HeadlessUI
-- **Date Handling**: date-fns
-- **Icons**: Heroicons
+- Frontend: Next.js, React, TypeScript, Tailwind CSS
+- Backend: Python, PostgreSQL
+- ETL: Python (pandas, SQLAlchemy)
 
-## Prerequisites
+## Features
 
-- Node.js 18+ and npm
-- Python 3.8+
-- pip (Python package manager)
+- Interactive map showing all tennis courts in NYC
+- Real-time availability data from NYC Parks
+- Filter by time preference (Morning, Afternoon, Evening)
+- Filter by court type (Hard, Clay)
+- Direct links to reserve available slots
 
-## Installation
+## Data Pipeline
 
-1. Clone the repository:
+The application uses a three-layer data architecture:
+
+1. Raw Layer: CSV files from NYC Parks website
+2. Staging Layer: Direct copy of CSV data in PostgreSQL
+3. Data Warehouse (DWH): Processed data with timestamps and constraints
+
+### ETL Process
+
+1. Courts Data (One-time load):
+   - Load `nyc_tennis_courts.csv` into staging
+   - Merge into DWH with court types and timestamps
+
+2. Availability Data (Periodic updates):
+   - Download availability CSVs
+   - Register files in `raw_files.file_registry`
+   - Load into staging with file references
+   - Merge into DWH with timestamps
+
+### Data Validation & Cleanup
+
+1. Court Data Validation:
+   - Coordinate validation (lat/lon within valid ranges)
+   - Court type validation (Hard/Clay)
+   - Duplicate court ID prevention
+   - Required field checks
+
+2. Availability Data Validation:
+   - Future date validation
+   - Time format validation
+   - Required field checks
+   - Foreign key constraints
+
+3. Automated Cleanup:
+   - Expired availability slot removal
+   - Old processed file cleanup
+   - Failed file record cleanup
+   - Physical file cleanup
+
+## Development Setup
+
+1. Install dependencies:
    ```bash
-   git clone https://github.com/yourusername/nyc-tennis-slots-finder.git
-   cd nyc-tennis-slots-finder
-   ```
+   # Python dependencies
+   pip install -r requirements.txt
+   pip install -r requirements-test.txt  # For testing
 
-2. Install Node.js dependencies:
-   ```bash
+   # Node.js dependencies
    npm install
    ```
 
-3. Install Python dependencies:
+2. Set up PostgreSQL database:
    ```bash
-   pip install -r requirements.txt
+   createdb nyc_tennis
+   alembic upgrade head
    ```
 
-4. Create a `.env.local` file in the root directory:
-   ```env
-   NODE_ENV=development
+3. Create `.env` file:
+   ```
+   DB_USER=your_username
+   DB_PASSWORD=your_password
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=nyc_tennis
    ```
 
-## Running Locally
+4. Run the ETL process:
+   ```bash
+   python -c "from src.etl.csv_loader import run_courts_etl; run_courts_etl()"
+   ```
 
-1. Start the development server:
+5. Start the development server:
    ```bash
    npm run dev
    ```
 
-2. Open [http://localhost:3000](http://localhost:3000) in your browser.
+## Testing
 
-## Data Updates
+The project includes a comprehensive test suite for the ETL pipeline:
 
-The application uses two CSV files:
-- `nyc_tennis_courts.csv`: Static data about tennis court locations (included in repo)
-- `nyc_tennis_court_availability.csv`: Dynamic availability data (generated when searching)
+1. Run tests:
+   ```bash
+   python -m pytest tests/ -v
+   ```
 
-## Contributing
+2. Test Coverage:
+   ```bash
+   python -m pytest tests/ --cov=src
+   ```
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+The test suite includes:
 
-## Security
+- Unit tests for courts ETL:
+  - Loading data to staging
+  - Merging to DWH
+  - Handling updates
+  - NULL value handling
+  - Data validation
+  - Coordinate validation
+  - Court type validation
 
-- Rate limiting implemented for API routes
-- Security headers configured
-- Input validation and sanitization
-- Error handling and logging
-- CORS protection
+- Unit tests for availability ETL:
+  - File registration
+  - Loading to staging
+  - Merging to DWH
+  - Foreign key constraints
+  - Unique constraints
+  - Date/time validation
+  - File cleanup
+
+- Error handling tests:
+  - Invalid CSV formats
+  - Invalid data values
+  - Transaction rollbacks
+  - Cleanup processes
+
+The tests use a separate test database (`nyc_tennis_test`) to avoid affecting production data.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- NYC Parks Department for providing the tennis court reservation system
-- OpenStreetMap contributors for map data
+MIT
