@@ -1,17 +1,16 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { useState, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { format } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
-import { Park } from '@/types';
-import { MagnifyingGlassIcon, ClockIcon, MapPinIcon, ArrowPathIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
-import toast from 'react-hot-toast';
+import { TennisCourt, CourtAvailability } from '@/utils/database';
+import { MagnifyingGlassIcon, ClockIcon, MapPinIcon, ArrowPathIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 
 // Dynamic import of ParksMap with no SSR
 const ParksMap = dynamic(() => import('@/components/ParksMap'), {
-  ssr: false, // This will only render the map on the client side
+  ssr: false,
   loading: () => (
     <div className="w-full h-[400px] rounded-lg overflow-hidden shadow-lg bg-gray-100 flex items-center justify-center">
       <div className="text-gray-500">Loading map...</div>
@@ -19,14 +18,67 @@ const ParksMap = dynamic(() => import('@/components/ParksMap'), {
   ),
 });
 
+type TimePreference = 'no-preference' | 'morning' | 'afternoon' | 'evening';
+type CourtTypePreference = 'no-preference' | 'hard' | 'clay';
+
+const TIME_PREFERENCES = [
+  { id: 'no-preference', label: 'No Preference', icon: ClockIcon },
+  { id: 'morning', label: 'Morning (6:00 AM - 11:59 AM)', icon: SunIcon },
+  { id: 'afternoon', label: 'Afternoon (12:00 PM - 4:59 PM)', icon: SunIcon },
+  { id: 'evening', label: 'Evening (5:00 PM onwards)', icon: MoonIcon },
+] as const;
+
+const COURT_TYPE_PREFERENCES = [
+  { id: 'no-preference', label: 'No Preference' },
+  { id: 'hard', label: 'Hard Courts' },
+  { id: 'clay', label: 'Clay Courts' },
+] as const;
+
+function isTimeInPreference(time: string, preference: TimePreference): boolean {
+  if (preference === 'no-preference') return true;
+
+  const timeComponents = time.toLowerCase().split(' ');
+  const timeStr = timeComponents[0];
+  const period = timeComponents[1]; // Will be "a.m." or "p.m."
+  
+  let [hours, minutes] = timeStr.split(':').map(Number);
+  
+  // Convert to 24-hour format
+  if (period === 'p.m.' && hours !== 12) {
+    hours += 12;
+  } else if (period === 'a.m.' && hours === 12) {
+    hours = 0;
+  }
+
+  switch (preference) {
+    case 'morning':
+      return hours < 12;
+    case 'afternoon':
+      return hours >= 12 && hours < 17;
+    case 'evening':
+      return hours >= 17;
+    default:
+      return true;
+  }
+}
+
+function isCourtTypeMatch(court: TennisCourt, preference: CourtTypePreference): boolean {
+  if (preference === 'no-preference') return true;
+  return court.court_type?.toLowerCase() === preference;
+}
+
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [timePreference, setTimePreference] = useState<TimePreference>('no-preference');
+  const [courtTypePreference, setCourtTypePreference] = useState<CourtTypePreference>('no-preference');
   const [isLoading, setIsLoading] = useState(false);
-  const [parks, setParks] = useState<Park[]>([]);
+  const [courts, setCourts] = useState<TennisCourt[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [selectedParkId, setSelectedParkId] = useState<string | null>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [courtAvailability, setCourtAvailability] = useState<Record<string, CourtAvailability[]>>({});
+  const mapRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const handleDateChange = (date: Date | null) => {
     if (date) {
@@ -34,69 +86,65 @@ export default function Home() {
     }
   };
 
-  const handleParkClick = (parkId: string) => {
-    setSelectedParkId(parkId);
-    // Scroll to the park's section
-    const parkElement = document.getElementById(`park-${parkId}`);
-    if (parkElement) {
-      parkElement.scrollIntoView({ behavior: 'smooth' });
+  const handleCourtClick = (courtId: string) => {
+    setSelectedCourtId(courtId);
+    // Scroll to the court's section
+    const courtElement = document.getElementById(`court-${courtId}`);
+    if (courtElement) {
+      courtElement.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  const fetchData = async (usePreviousData: boolean) => {
+  const scrollToMap = () => {
+    if (mapRef.current) {
+      mapRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleFindSlots = async () => {
     setIsLoading(true);
     setError(null);
+
     try {
-      console.log('[UI] Fetching data with params:', {
-        usePreviousData,
-        selectedDate: format(selectedDate, 'yyyy-MM-dd')
+      // Fetch all courts
+      const courtsResponse = await fetch('/api/courts');
+      if (!courtsResponse.ok) {
+        throw new Error('Failed to fetch courts');
+      }
+      const courtsData: TennisCourt[] = await courtsResponse.json();
+      
+      // Filter courts based on court type preference
+      const filteredCourts = courtsData.filter(court => isCourtTypeMatch(court, courtTypePreference));
+      setCourts(filteredCourts);
+
+      // Fetch availability for filtered courts
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const availabilityPromises = filteredCourts.map(async (court) => {
+        const response = await fetch(`/api/courts?courtId=${court.court_id}&date=${dateStr}`);
+        const data: CourtAvailability[] = await response.json();
+        
+        // Filter slots based on time preference
+        const filteredData = data.filter(slot => isTimeInPreference(slot.time, timePreference));
+        
+        return { courtId: court.court_id, availability: filteredData };
       });
 
-      const response = await fetch(`/api/courts?usePreviousData=${usePreviousData}`);
-      const data = await response.json();
+      const results = await Promise.all(availabilityPromises);
+      const availabilityMap = results.reduce((acc, { courtId, availability }) => {
+        if (availability.length > 0) { // Only include courts with available slots
+          acc[courtId] = availability;
+        }
+        return acc;
+      }, {} as Record<string, CourtAvailability[]>);
 
-      console.log('[UI] Received response:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch data');
-      }
-
-      if (data.success) {
-        console.log('[UI] Setting parks data:', data.parks);
-        setParks(data.parks);
-        setLastUpdate(data.timestamp ? new Date(data.timestamp) : new Date());
-
-        // Debug log for selected date's data
-        const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-        data.parks.forEach((park: Park) => {
-          const slots = park.availableSlots[selectedDateStr] || [];
-          console.log(`[UI] Park ${park.name} has ${slots.length} slots for ${selectedDateStr}`);
-        });
-      } else {
-        throw new Error(data.error || 'Failed to fetch tennis courts');
-      }
-    } catch (error) {
-      console.error('[UI] Error fetching data:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-      setError(errorMessage);
-      toast.error(errorMessage);
+      setCourtAvailability(availabilityMap);
+      setLastUpdate(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleFindSlots = () => fetchData(false);
-  const handleUsePreviousData = () => fetchData(true);
-
-  const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-
-  // Debug log whenever selectedDate or parks change
-  console.log('[UI] Rendering with:', {
-    selectedDate: selectedDateStr,
-    parksCount: parks.length,
-    parksWithSlots: parks.filter(park => park.availableSlots[selectedDateStr]?.length > 0).length,
-    error
-  });
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -109,8 +157,9 @@ export default function Home() {
 
         {/* Search Controls */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            <div className="w-full md:w-auto md:flex-grow">
+          <div className="space-y-6">
+            {/* Date Selection */}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Date
               </label>
@@ -128,31 +177,70 @@ export default function Home() {
                 popperClassName="!z-[9999]"
               />
             </div>
-            <div className="flex gap-3 w-full md:w-auto md:self-end">
+
+            {/* Court Type Preference */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Court Type Preference
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {COURT_TYPE_PREFERENCES.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setCourtTypePreference(id as CourtTypePreference)}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md border ${
+                      courtTypePreference === id
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    } transition-colors`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Preference */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Time Preference
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {TIME_PREFERENCES.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setTimePreference(id as TimePreference)}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-md border ${
+                      timePreference === id
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:bg-gray-50'
+                    } transition-colors`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Find Slots Button */}
+            <div className="flex justify-end">
               <button
                 onClick={handleFindSlots}
                 disabled={isLoading}
-                className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 h-10 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]"
+                className="inline-flex items-center justify-center px-6 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
-                    <ArrowPathIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                    <ArrowPathIcon className="animate-spin -ml-1 mr-2 h-5 w-5" />
                     Loading...
                   </>
                 ) : (
                   <>
-                    <MagnifyingGlassIcon className="-ml-1 mr-2 h-4 w-4" />
+                    <MagnifyingGlassIcon className="-ml-1 mr-2 h-5 w-5" />
                     Find Slots
                   </>
                 )}
-              </button>
-              <button
-                onClick={handleUsePreviousData}
-                disabled={isLoading}
-                className="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 h-10 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed min-w-[160px]"
-              >
-                <ArrowPathIcon className="-ml-1 mr-2 h-4 w-4" />
-                Use Previous Data
               </button>
             </div>
           </div>
@@ -168,56 +256,57 @@ export default function Home() {
         {error && (
           <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-8">
             <div className="flex items-center">
-              <ExclamationCircleIcon className="h-5 w-5 text-red-400 mr-2" />
               <p className="text-red-700">{error}</p>
             </div>
-            {error.includes('previous data') && (
-              <p className="mt-2 text-sm text-red-600">
-                Please click the "Find Slots" button to fetch fresh data.
-              </p>
-            )}
           </div>
         )}
 
         {/* Map Section */}
-        {parks.length > 0 && (
-          <div className="mb-8">
+        {courts.length > 0 && (
+          <div className="mb-8" ref={mapRef}>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Tennis Courts Locations
             </h2>
             <ParksMap
-              parks={parks}
-              onParkClick={handleParkClick}
+              courts={courts}
+              selectedDate={selectedDate}
+              onParkClick={handleCourtClick}
             />
           </div>
         )}
 
         {/* Results */}
         <div ref={resultsRef} className="space-y-8">
-          {parks.map((park) => {
-            const availableSlots = park.availableSlots[selectedDateStr] || [];
+          {courts.map((court) => {
+            const availableSlots = courtAvailability[court.court_id] || [];
             
-            // Skip parks with no available slots for the selected date
+            // Skip courts with no available slots
             if (availableSlots.length === 0) return null;
 
             return (
               <div 
-                key={park.id} 
-                id={`park-${park.id}`}
+                key={court.court_id} 
+                id={`court-${court.court_id}`}
                 className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 ${
-                  selectedParkId === park.id ? 'ring-2 ring-blue-500' : ''
+                  selectedCourtId === court.court_id ? 'ring-2 ring-blue-500' : ''
                 }`}
               >
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                   <h3 className="text-xl font-semibold text-gray-900">
-                    Park Name: {park.id} : {park.name}
+                    Park Name: {court.court_id} : {court.park_name}
                   </h3>
                   <div className="mt-1 space-y-1">
-                    <p className="text-sm text-gray-600">{park.details}</p>
+                    <p className="text-sm text-gray-600">{court.park_details}</p>
                     <p className="text-sm text-gray-600 flex items-center">
                       <MapPinIcon className="h-4 w-4 mr-1" />
-                      {park.address}
+                      {court.address}
                     </p>
+                    {court.phone && (
+                      <p className="text-sm text-gray-600">Phone: {court.phone}</p>
+                    )}
+                    {court.hours && (
+                      <p className="text-sm text-gray-600">Hours: {court.hours}</p>
+                    )}
                   </div>
                 </div>
 
@@ -234,19 +323,19 @@ export default function Home() {
                         acc[slot.court].push(slot);
                         return acc;
                       }, {} as Record<string, typeof availableSlots>)
-                    ).map(([court, slots]) => (
-                      <div key={court} className="border-t pt-4 first:border-t-0 first:pt-0">
-                        <h5 className="font-medium text-gray-700 mb-2">{court}</h5>
+                    ).map(([courtName, slots]) => (
+                      <div key={courtName} className="border-t pt-4 first:border-t-0 first:pt-0">
+                        <h5 className="font-medium text-gray-700 mb-2">{courtName}</h5>
                         <div className="flex flex-wrap gap-2">
                           {slots.map((slot, index) => (
                             <a
-                              key={`${court}-${index}`}
-                              href={slot.reservationLink}
+                              key={`${courtName}-${index}`}
+                              href={slot.reservation_link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center bg-green-100 text-green-800 px-4 py-2 rounded-md text-sm hover:bg-green-200 transition-colors"
+                              className="inline-flex items-center bg-green-100 text-green-800 px-3 py-1.5 rounded-md text-sm hover:bg-green-200 transition-colors"
                             >
-                              <ClockIcon className="h-4 w-4 mr-2" />
+                              <ClockIcon className="h-4 w-4 mr-1.5" />
                               {slot.time}
                             </a>
                           ))}
@@ -255,18 +344,31 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
+
+                <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+                  <button
+                    onClick={scrollToMap}
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1 px-3 py-1.5 rounded-md hover:bg-blue-50 transition-colors group"
+                    title="Go back to map"
+                    aria-label="Go back to map"
+                  >
+                    <MapPinIcon className="h-5 w-5" />
+                    <span className="hidden group-hover:inline">View on map</span>
+                  </button>
+                </div>
               </div>
             );
           }).filter(Boolean)}
         </div>
 
         {/* No Results State */}
-        {!isLoading && !error && (!parks.length || !parks.some(park => 
-          park.availableSlots[selectedDateStr]?.length > 0
-        )) && (
+        {!isLoading && !error && courts.length > 0 && !Object.values(courtAvailability).some(slots => slots.length > 0) && (
           <div className="text-center text-gray-600 mt-8">
-            <p>No available courts found for {format(selectedDate, 'MMMM d, yyyy')}.</p>
-            <p className="mt-2">Try selecting a different date or click "Find Slots" to refresh the data.</p>
+            <p>
+              No available {courtTypePreference !== 'no-preference' ? `${courtTypePreference} ` : ''}courts found for {format(selectedDate, 'MMMM d, yyyy')}
+              {timePreference !== 'no-preference' && ` during ${timePreference} hours`}.
+            </p>
+            <p className="mt-2">Try selecting different preferences or click "Find Slots" to refresh the data.</p>
           </div>
         )}
       </div>

@@ -1,164 +1,117 @@
 from bs4 import BeautifulSoup
-import pandas as pd
 import requests
+import pandas as pd
+from datetime import datetime, timedelta
 import os
-import sys
 from pathlib import Path
-import time
-import logging
-from typing import Tuple, Optional
-
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # Constants
-MAX_RETRIES = 3
-RETRY_DELAY = 2  # seconds
-REQUEST_TIMEOUT = 30  # seconds
-OUTPUT_DIR = Path(os.getenv('OUTPUT_DIR', '.'))
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+BASE_URL = "https://www.nycgovparks.org/tennisreservation"
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "court_availability", "raw_files")
 
-def create_secure_headers() -> dict:
-    return {
-        "User-Agent": USER_AGENT,
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.nycgovparks.org/",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "DNT": "1",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Dest": "document"
-    }
+def get_court_id_from_url(url: str) -> str:
+    """Extract court ID from facility URL."""
+    return url.split('/')[-1]
 
-def fetch_court_availability(court_id: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    url = f"https://www.nycgovparks.org/tennisreservation/availability/{court_id}"
+def parse_availability_table(html: str) -> list[dict]:
+    """Parse availability table from HTML."""
+    soup = BeautifulSoup(html, 'html.parser')
+    table = soup.find('table', class_='table')
+    if not table:
+        return []
     
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = requests.get(
-                url,
-                headers=create_secure_headers(),
-                allow_redirects=True,
-                timeout=REQUEST_TIMEOUT
-            )
+    availability = []
+    
+    # Get court names from header
+    headers = table.find_all('th')
+    court_names = [h.text.strip() for h in headers[1:]]  # Skip 'Time' column
+    
+    # Parse rows
+    for row in table.find_all('tr')[1:]:  # Skip header row
+        cells = row.find_all(['td', 'th'])
+        if not cells:
+            continue
+        
+        time = cells[0].text.strip()
+        
+        # Process each court's availability
+        for i, cell in enumerate(cells[1:], 0):
+            court = court_names[i]
+            link = cell.find('a')
             
-            if response.url != url:
-                logger.warning(f"Redirect detected for court_id {court_id}, skipping.")
-                return pd.DataFrame(), pd.DataFrame()
-
-            response.raise_for_status()
-            
-            # Validate content type
-            if 'text/html' not in response.headers.get('Content-Type', ''):
-                logger.error(f"Invalid content type for court_id {court_id}")
-                return pd.DataFrame(), pd.DataFrame()
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Basic content validation
-            if not soup.find("h1"):
-                logger.error(f"Invalid page structure for court_id {court_id}")
-                return pd.DataFrame(), pd.DataFrame()
-
-            park_name = soup.find("h1").get_text(strip=True)
-            location_details_div = soup.find(id="location_details")
-            park_details = location_details_div.get_text(separator="\n", strip=True) if location_details_div else None
-
-            logger.info(f"Processing park: {park_name}")
-
-            courts = pd.DataFrame([{
-                "court_id": court_id,
-                "park_name": park_name,
-                "park_details": park_details
-            }])
-
-            court_availability_div = soup.find(id="court-availability")
-            if not court_availability_div:
-                logger.warning(f"No availability data found for court_id {court_id}")
-                return courts, pd.DataFrame()
-
-            tab_links = court_availability_div.find_all("a")
-            dates = [a["href"].replace("#", "") for a in tab_links]
-
-            records = []
-            tab_content = soup.find("div", class_="tab-content")
-            for tab in tab_content.find_all("div", class_="tab-pane"):
-                date_id = tab["id"]
-                table = tab.find("table")
-                if not table:
-                    continue
-                
-                headers = [th.get_text(strip=True) for th in table.find("thead").find_all("th")]
-                for row in table.find("tbody").find_all("tr"):
-                    time = row.find("td").get_text(strip=True)
-                    cells = row.find_all("td")[1:]
-                    for i, cell in enumerate(cells):
-                        link = None
-                        if cell.find("a"):
-                            status = cell.find("a").get_text(strip=True)
-                            link = cell.find("a")["href"]
-                            if link and not link.startswith("http"):
-                                link = "https://www.nycgovparks.org/" + link.lstrip("/")
-                        else:
-                            status = cell.get_text(strip=True)
-                        records.append({
-                            "court_id": court_id,
-                            "date": date_id,
-                            "time": time,
-                            "court": headers[i+1],
-                            "status": status,
-                            "reservation_link": link
-                        })
-
-            court_availability = pd.DataFrame(records)
-            return courts, court_availability
-
-        except requests.RequestException as e:
-            logger.error(f"Error fetching court {court_id} (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}")
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(RETRY_DELAY)
+            if link and 'Reserve this time' in link.text:
+                status = 'Reserve this time'
+                reservation_link = link['href']
             else:
-                return pd.DataFrame(), pd.DataFrame()
-        except Exception as e:
-            logger.error(f"Unexpected error processing court {court_id}: {str(e)}")
-            return pd.DataFrame(), pd.DataFrame()
-
-def main():
-    try:
-        # Ensure output directory exists
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-        master_courts = pd.DataFrame()
-        master_availability = pd.DataFrame()
-
-        for court_id in range(1, 14):
-            courts, court_availability = fetch_court_availability(str(court_id))
-            if not courts.empty:
-                master_courts = pd.concat([master_courts, courts], ignore_index=True)
-            if not court_availability.empty:
-                master_availability = pd.concat([master_availability, court_availability], ignore_index=True)
+                status = 'Not available'
+                reservation_link = None
             
-            # Add delay between requests
-            time.sleep(1)
+            availability.append({
+                'time': time,
+                'court': court,
+                'status': status,
+                'reservation_link': reservation_link
+            })
+    
+    return availability
 
-        # Save availability data
-        availability_path = OUTPUT_DIR / "nyc_tennis_court_availability.csv"
-        master_availability.to_csv(availability_path, index=False)
-        logger.info(f"Saved availability data to {availability_path}")
+def get_availability_data(court_id: str, date: str) -> list[dict]:
+    """Get availability data for a specific court and date."""
+    url = f"{BASE_URL}/facility/{court_id}"
+    response = requests.get(url)
+    
+    availability = parse_availability_table(response.text)
+    
+    # Add court_id and date to each record
+    for record in availability:
+        record['court_id'] = str(court_id)  # Ensure court_id is string
+        record['date'] = date
+    
+    return availability
 
-        # Courts data is constant, commented out to prevent updates
-        # courts_path = OUTPUT_DIR / "nyc_tennis_courts.csv"
-        # master_courts.to_csv(courts_path, index=False)
+def save_availability_data(data: list[dict], output_dir: str) -> str:
+    """Save availability data to CSV file."""
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Ensure court_id is string
+    df['court_id'] = df['court_id'].astype(str)
+    
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"court_availability_{timestamp}.csv"
+    file_path = os.path.join(output_dir, filename)
+    
+    # Save to CSV
+    df.to_csv(file_path, index=False)
+    return file_path
 
-    except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
-        sys.exit(1)
+def main() -> str:
+    """Main function to fetch and save availability data."""
+    # Get tomorrow's date
+    tomorrow = datetime.now() + timedelta(days=1)
+    date_str = tomorrow.strftime('%Y-%m-%d')
+    
+    # Get court IDs from CSV
+    courts_file = os.path.join(os.path.dirname(__file__), "..", "nyc_tennis_courts.csv")
+    courts_df = pd.read_csv(courts_file)
+    
+    # Fetch availability for each court
+    all_availability = []
+    for court_id in courts_df['court_id']:
+        try:
+            availability = get_availability_data(str(court_id), date_str)
+            all_availability.extend(availability)
+        except Exception as e:
+            print(f"Error fetching data for court {court_id}: {str(e)}")
+    
+    # Save data
+    if all_availability:
+        return save_availability_data(all_availability, OUTPUT_DIR)
+    return ""
 
 if __name__ == "__main__":
     main()
