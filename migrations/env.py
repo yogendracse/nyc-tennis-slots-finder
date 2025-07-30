@@ -10,7 +10,10 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.database.config import Base, DATABASE_URL
-from src.database.models import FileRegistry, StagingTennisCourt, DwhTennisCourt, CourtAvailabilityHistory
+from src.database.models import (
+    FileRegistry, StagingTennisCourt, DwhTennisCourt,
+    StagingCourtAvailability, DwhCourtAvailability
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -66,7 +69,7 @@ def run_migrations_online() -> None:
 
     """
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
