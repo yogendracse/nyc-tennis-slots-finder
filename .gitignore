@@ -60,3 +60,7 @@ nyc_tennis_court_availability.csv
 .vscode
 *.swp
 *.swo
+
+# Logs
+logs/
+*.log
