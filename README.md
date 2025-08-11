@@ -1,5 +1,7 @@
 # NYC Tennis Slots Finder
 
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/yogendracse/nyc-tennis-slots-finder/releases) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Find available tennis courts across NYC parks in one place.
 
 ## Tech Stack
@@ -10,11 +12,27 @@ Find available tennis courts across NYC parks in one place.
 
 ## Features
 
+### Core Functionality
 - Interactive map showing all tennis courts in NYC
 - Real-time availability data from NYC Parks
 - Filter by time preference (Morning, Afternoon, Evening)
 - Filter by court type (Hard, Clay)
 - Direct links to reserve available slots
+
+### 🆕 Location-Based Features (v1.1.0)
+- **Smart Location Input**: Enter ZIP codes, addresses, or use current geolocation
+- **Distance-Based Sorting**: Courts automatically sorted by proximity to your location
+- **Real-Time Distance Calculation**: See exact mileage from your location to each court
+- **User Location Markers**: Blue marker shows your position on the interactive map
+- **Enhanced Map Experience**: Dynamic map view that adjusts to show both courts and your location
+- **Offline ZIP Support**: Instant lookup for NYC ZIP codes without external API calls
+
+### User Experience Improvements
+- **Prominent Input Design**: Enhanced styling with better borders, shadows, and hover effects
+- **Keyboard Shortcuts**: Press Enter to set location after typing address/ZIP
+- **Collapsible Help**: Space-efficient map instructions that expand when needed
+- **Step-by-Step Guide**: Clear 3-step instructions for new users
+- **Responsive Layout**: Optimized for both desktop and mobile devices
 
 
 ## Data Pipeline
@@ -56,6 +74,33 @@ The application uses a three-layer data architecture:
    - Old processed file cleanup
    - Failed file record cleanup
    - Physical file cleanup
+
+## 🚀 Quick Start Guide
+
+### Using Location-Based Features
+
+1. **Set Your Location** (Choose one method):
+   - **ZIP Code**: Enter a 5-digit NYC ZIP code (e.g., `10001`)
+   - **Address**: Type a full address (e.g., `350 5th Ave, New York, NY`)
+   - **Current Location**: Click the location icon to use your device's GPS
+
+2. **Select Date & Preferences**:
+   - Choose when you want to play
+   - Select court type preference (Hard/Clay)
+   - Pick time of day preference (Morning/Afternoon/Evening)
+
+3. **Find Available Courts**:
+   - Courts are automatically sorted by distance from your location
+   - See exact mileage for each court
+   - Click on map markers for detailed availability
+   - Use "Find Slots" to see all available times
+
+### Location Input Tips
+
+- **ZIP Codes**: Fastest option for NYC residents
+- **Addresses**: Use full street addresses for precise results
+- **Geolocation**: Most accurate for current location (requires browser permission)
+- **Enter Key**: Press Enter after typing to quickly set location
 
 ## Development Setup
 
