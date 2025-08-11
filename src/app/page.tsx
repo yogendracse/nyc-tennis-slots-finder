@@ -7,6 +7,7 @@ import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { TennisCourt, CourtAvailability } from '@/utils/database';
 import { MagnifyingGlassIcon, ClockIcon, MapPinIcon, ArrowPathIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
+import { haversineDistanceMiles } from '@/utils/distance';
 
 // Dynamic import of ParksMap with no SSR
 const ParksMap = dynamic(() => import('@/components/ParksMap'), {
@@ -80,9 +81,33 @@ export default function Home() {
   const mapRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // Location input and state
+  const [locationQuery, setLocationQuery] = useState<string>('');
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState<string>('');
+  const [mapInstructionsExpanded, setMapInstructionsExpanded] = useState<boolean>(false);
+
   const handleDateChange = (date: Date | null) => {
     if (date) {
       setSelectedDate(date);
+    }
+  };
+
+  const handleSetLocation = async () => {
+    const q = locationQuery.trim();
+    if (!q) return;
+    try {
+      setLocationStatus('Resolving location...');
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as any));
+        throw new Error(err?.error || 'Failed to resolve address');
+      }
+      const data = await res.json();
+      setUserLocation({ lat: data.lat, lon: data.lon });
+      setLocationStatus(`Location set: ${data.displayName || q}`);
+    } catch (e: any) {
+      setLocationStatus(e?.message || 'Failed to resolve address');
     }
   };
 
@@ -114,7 +139,21 @@ export default function Home() {
       const courtsData: TennisCourt[] = await courtsResponse.json();
       
       // Filter courts based on court type preference
-      const filteredCourts = courtsData.filter(court => isCourtTypeMatch(court, courtTypePreference));
+      let filteredCourts = courtsData.filter(court => isCourtTypeMatch(court, courtTypePreference));
+
+      // Sort by distance if user location is set
+      if (userLocation) {
+        const origin = { lat: userLocation.lat, lon: userLocation.lon };
+        filteredCourts = [...filteredCourts]
+          .map(c => ({
+            ...c,
+            _distanceMiles: isFinite(c.lat) && isFinite(c.lon)
+              ? haversineDistanceMiles(origin, { lat: c.lat, lon: c.lon })
+              : Number.POSITIVE_INFINITY
+          }))
+          .sort((a: any, b: any) => (a._distanceMiles ?? Infinity) - (b._distanceMiles ?? Infinity))
+          .map(({ _distanceMiles, ...rest }) => rest as TennisCourt);
+      }
       setCourts(filteredCourts);
 
       // Fetch availability for filtered courts
@@ -149,33 +188,123 @@ export default function Home() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">NYC Tennis Slots Finder</h1>
-          <p className="text-xl text-gray-600">Find available tennis courts across NYC parks in one place</p>
+
+
+
+        {/* Opening Instructions */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6">
+          <div className="text-center">
+            <p className="text-lg text-gray-700 mb-4">Find available tennis courts across NYC parks in one place</p>
+            
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <h2 className="text-lg font-semibold text-gray-800 mb-3">How to use this app:</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-blue-600 font-bold">1</span>
+                  </div>
+                  <p className="text-center"><strong>Set your location</strong><br/>Enter ZIP code, address, or use your current location</p>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-blue-600 font-bold">2</span>
+                  </div>
+                  <p className="text-center"><strong>Choose date & preferences</strong><br/>Pick when you want to play and court type</p>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                    <span className="text-blue-600 font-bold">3</span>
+                  </div>
+                  <p className="text-center"><strong>Find & book courts</strong><br/>View available slots sorted by distance</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Search Controls */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <div className="bg-white rounded-lg shadow-md border-2 border-gray-200 p-6 mb-8">
           <div className="space-y-6">
-            {/* Date Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Date
-              </label>
-              <DatePicker
-                selected={selectedDate}
-                onChange={handleDateChange}
-                dateFormat="MMMM d, yyyy"
-                minDate={new Date()}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 h-10"
-                wrapperClassName="w-full"
-                calendarClassName="!text-sm"
-                popperProps={{
-                  strategy: "fixed"
-                }}
-                popperClassName="!z-[9999]"
-              />
+            {/* Location and Date Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Location Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">ZIP or address</label>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={locationQuery}
+                      onChange={(e) => setLocationQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSetLocation();
+                        }
+                      }}
+                      placeholder="e.g., 10001 or 350 5th Ave, New York, NY"
+                      className="w-full rounded-lg border-2 border-gray-300 shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:ring-opacity-50 h-12 pl-4 pr-12 text-gray-700 placeholder-gray-500 transition-all duration-200 hover:border-gray-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!('geolocation' in navigator)) {
+                          setLocationStatus('Geolocation not supported');
+                          return;
+                        }
+                        setLocationStatus('Requesting location permission...');
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            const { latitude, longitude } = pos.coords;
+                            setUserLocation({ lat: latitude, lon: longitude });
+                            setLocationStatus('Location set from device');
+                          },
+                          (err) => {
+                            setLocationStatus(err.message || 'Failed to get current location');
+                          },
+                          { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 }
+                        );
+                      }}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                      title="Use my current location"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSetLocation}
+                    className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                  >
+                    Set location
+                  </button>
+                </div>
+                {locationStatus && (
+                  <p className="mt-2 text-sm text-gray-600">{locationStatus}</p>
+                )}
+              </div>
+
+              {/* Date Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Date
+                </label>
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={handleDateChange}
+                  dateFormat="MMMM d, yyyy"
+                  minDate={new Date()}
+                  className="w-full rounded-lg border-2 border-gray-300 shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:ring-opacity-50 h-12 px-4 text-gray-700 transition-all duration-200 hover:border-gray-400"
+                  wrapperClassName="w-full"
+                  calendarClassName="!text-sm"
+                  popperProps={{
+                    strategy: "fixed"
+                  }}
+                  popperClassName="!z-[9999]"
+                />
+              </div>
             </div>
 
             {/* Court Type Preference */}
@@ -267,10 +396,51 @@ export default function Home() {
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Tennis Courts Locations
             </h2>
+            
+            {/* Map Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg mb-4">
+              <button
+                onClick={() => setMapInstructionsExpanded(!mapInstructionsExpanded)}
+                className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-blue-100 transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="font-medium text-blue-800">How to use the map</span>
+                </div>
+                <svg 
+                  className={`h-5 w-5 text-blue-400 transition-transform duration-200 ${
+                    mapInstructionsExpanded ? 'rotate-180' : ''
+                  }`}
+                  fill="currentColor" 
+                  viewBox="0 0 20 20"
+                >
+                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+              
+              {mapInstructionsExpanded && (
+                <div className="px-4 pb-4 border-t border-blue-200">
+                  <div className="pt-3 text-sm text-blue-800">
+                    <ul className="space-y-1 text-blue-700">
+                      <li>• <strong>Click any tennis court marker</strong> to see available slots and details</li>
+                      <li>• <strong>Blue marker</strong> shows your location (if set)</li>
+                      <li>• <strong>Scroll and zoom</strong> to explore different areas</li>
+                      <li>• <strong>Click "View Full Details"</strong> to see all available times</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <ParksMap
               courts={courts}
               selectedDate={selectedDate}
               onParkClick={handleCourtClick}
+              userLocation={userLocation || undefined}
             />
           </div>
         )}
@@ -301,6 +471,9 @@ export default function Home() {
                       <MapPinIcon className="h-4 w-4 mr-1" />
                       {court.address}
                     </p>
+                    {userLocation && isFinite(court.lat) && isFinite(court.lon) && (
+                      <p className="text-sm text-gray-600">{haversineDistanceMiles(userLocation, { lat: court.lat, lon: court.lon }).toFixed(1)} mi away</p>
+                    )}
                     {court.phone && (
                       <p className="text-sm text-gray-600">Phone: {court.phone}</p>
                     )}
