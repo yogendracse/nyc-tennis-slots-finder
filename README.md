@@ -105,6 +105,24 @@ feature/add-map → dev → qa → main
               Integration Testing
 ```
 
+## 🚨 **Deployment Process**
+
+**IMPORTANT:** All deployments must follow the proper PR process with CI checks!
+
+### Required Steps:
+1. **Feature Branch** → **PR to Dev** (with CI checks)
+2. **Dev** → **PR to QA** (with CI checks)  
+3. **QA** → **PR to Main** (with CI checks)
+4. **Main** → **Production Deployment**
+
+### ⚠️ **Never Skip:**
+- Pull Requests
+- CI/CD checks
+- Code reviews
+- Branch protection rules
+
+**📖 [Full Deployment Workflow](DEPLOYMENT_WORKFLOW.md)**
+
 2. Set up PostgreSQL database:
    ```bash
    createdb nyc_tennis
