@@ -7,6 +7,7 @@ import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import { TennisCourt, CourtAvailability } from '@/utils/database';
 import { MagnifyingGlassIcon, ClockIcon, MapPinIcon, ArrowPathIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
+import { haversineDistanceMiles } from '@/utils/distance';
 
 // Dynamic import of ParksMap with no SSR
 const ParksMap = dynamic(() => import('@/components/ParksMap'), {
@@ -80,6 +81,11 @@ export default function Home() {
   const mapRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
+  // Location input and state
+  const [locationQuery, setLocationQuery] = useState<string>('');
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationStatus, setLocationStatus] = useState<string>('');
+
   const handleDateChange = (date: Date | null) => {
     if (date) {
       setSelectedDate(date);
@@ -114,7 +120,21 @@ export default function Home() {
       const courtsData: TennisCourt[] = await courtsResponse.json();
       
       // Filter courts based on court type preference
-      const filteredCourts = courtsData.filter(court => isCourtTypeMatch(court, courtTypePreference));
+      let filteredCourts = courtsData.filter(court => isCourtTypeMatch(court, courtTypePreference));
+
+      // Sort by distance if user location is set
+      if (userLocation) {
+        const origin = { lat: userLocation.lat, lon: userLocation.lon };
+        filteredCourts = [...filteredCourts]
+          .map(c => ({
+            ...c,
+            _distanceMiles: isFinite(c.lat) && isFinite(c.lon)
+              ? haversineDistanceMiles(origin, { lat: c.lat, lon: c.lon })
+              : Number.POSITIVE_INFINITY
+          }))
+          .sort((a: any, b: any) => (a._distanceMiles ?? Infinity) - (b._distanceMiles ?? Infinity))
+          .map(({ _distanceMiles, ...rest }) => rest as TennisCourt);
+      }
       setCourts(filteredCourts);
 
       // Fetch availability for filtered courts
@@ -158,6 +178,69 @@ export default function Home() {
         {/* Search Controls */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="space-y-6">
+            {/* Location Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ZIP or address</label>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                <input
+                  type="text"
+                  value={locationQuery}
+                  onChange={(e) => setLocationQuery(e.target.value)}
+                  placeholder="e.g., 10001 or 350 5th Ave, New York, NY"
+                  className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 h-10 px-3"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const q = locationQuery.trim();
+                    if (!q) return;
+                    try {
+                      setLocationStatus('Resolving location...');
+                      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({} as any));
+                        throw new Error(err?.error || 'Failed to resolve address');
+                      }
+                      const data = await res.json();
+                      setUserLocation({ lat: data.lat, lon: data.lon });
+                      setLocationStatus(`Location set: ${data.displayName || q}`);
+                    } catch (e: any) {
+                      setLocationStatus(e?.message || 'Failed to resolve address');
+                    }
+                  }}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  Set location
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!('geolocation' in navigator)) {
+                      setLocationStatus('Geolocation not supported');
+                      return;
+                    }
+                    setLocationStatus('Requesting location permission...');
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => {
+                        const { latitude, longitude } = pos.coords;
+                        setUserLocation({ lat: latitude, lon: longitude });
+                        setLocationStatus('Location set from device');
+                      },
+                      (err) => {
+                        setLocationStatus(err.message || 'Failed to get current location');
+                      },
+                      { enableHighAccuracy: false, maximumAge: 300000, timeout: 10000 }
+                    );
+                  }}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  Use my location
+                </button>
+              </div>
+              {locationStatus && (
+                <p className="mt-2 text-sm text-gray-600">{locationStatus}</p>
+              )}
+            </div>
             {/* Date Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -271,6 +354,7 @@ export default function Home() {
               courts={courts}
               selectedDate={selectedDate}
               onParkClick={handleCourtClick}
+              userLocation={userLocation || undefined}
             />
           </div>
         )}
@@ -301,6 +385,9 @@ export default function Home() {
                       <MapPinIcon className="h-4 w-4 mr-1" />
                       {court.address}
                     </p>
+                    {userLocation && isFinite(court.lat) && isFinite(court.lon) && (
+                      <p className="text-sm text-gray-600">{haversineDistanceMiles(userLocation, { lat: court.lat, lon: court.lon }).toFixed(1)} mi away</p>
+                    )}
                     {court.phone && (
                       <p className="text-sm text-gray-600">Phone: {court.phone}</p>
                     )}

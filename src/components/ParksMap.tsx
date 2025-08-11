@@ -31,6 +31,7 @@ interface ParksMapProps {
   courts: TennisCourt[];
   selectedDate: Date;
   onParkClick: (parkId: string) => void;
+  userLocation?: { lat: number; lon: number };
 }
 
 function getSlotSummary(slots: TimeSlot[]): SlotSummary {
@@ -71,7 +72,7 @@ const Map = dynamic(() => import('react-leaflet').then((mod) => mod.MapContainer
 // Default coordinates (Central Park Tennis Center)
 const DEFAULT_CENTER = [40.7831, -73.9712];
 
-export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMapProps) {
+export default function ParksMap({ courts, selectedDate, onParkClick, userLocation }: ParksMapProps) {
   const [mounted, setMounted] = useState(false);
   const [expandedCourtId, setExpandedCourtId] = useState<string | null>(null);
   const [availabilityData, setAvailabilityData] = useState<Record<string, TimeSlot[]>>({});
@@ -169,6 +170,14 @@ export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMap
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        {userLocation && (
+          <Marker position={[userLocation.lat, userLocation.lon]}>
+            <Popup>
+              <div className="p-2 text-sm">Your location</div>
+            </Popup>
+          </Marker>
+        )}
+
         {validCourts.map((court) => {
           const slots = availabilityData[court.park_id] || [];
           const summary = getSlotSummary(slots);
