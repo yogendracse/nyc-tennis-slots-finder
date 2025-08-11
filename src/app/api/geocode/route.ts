@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import zipCentroids from '../../../../data/nyc_zip_centroids.json';
+import zipCentroids from '../../../data/nyc_zip_centroids.json';
 
 type CacheEntry = { lat: number; lon: number; displayName: string; ts: number };
 
