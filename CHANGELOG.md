@@ -84,10 +84,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development setup instructions
 - Branching strategy documentation
 
+## [0.9.0] - 2025-01-XX
+
+### 🆕 Added
+- **ETL Scheduler System**
+  - Hourly ETL scheduler with logging support
+  - Automated data collection from NYC Parks
+  - Log directory management and cleanup
+
+- **Scraper Improvements**
+  - Enhanced scraper to collect data from all parks
+  - Updated frontend for new database schema
+  - Improved data collection reliability
+
+### 🔧 Changed
+- Enhanced ETL pipeline automation
+- Improved data collection processes
+- Better error handling and logging
+
+### 🐛 Fixed
+- Added logs directory to .gitignore
+- Improved scraper data collection coverage
+
 ---
 
 ## Version History
 
+- **0.9.0**: ETL scheduler system and scraper improvements
 - **1.0.0**: Initial release with core tennis court finding functionality
 - **1.1.0**: Major feature addition - location-based court finding and distance sorting
 - **Unreleased**: Future features and improvements
