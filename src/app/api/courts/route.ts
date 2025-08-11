@@ -4,12 +4,12 @@ import { getAllCourts, getCourtAvailability } from '@/utils/database';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const courtId = searchParams.get('courtId');
+    const parkId = searchParams.get('parkId');  // Changed from courtId to parkId
     const date = searchParams.get('date');
 
-    // If courtId and date are provided, return availability
-    if (courtId && date) {
-      const availability = await getCourtAvailability(courtId, date);
+    // If parkId and date are provided, return availability
+    if (parkId && date) {
+      const availability = await getCourtAvailability(parkId, date);
       return NextResponse.json(availability);
     }
 

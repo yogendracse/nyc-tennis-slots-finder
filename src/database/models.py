@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, DECIMAL, ForeignKey, UniqueConstraint, Date
+from sqlalchemy import Column, Integer, String, DateTime, Text, DECIMAL, ForeignKey, UniqueConstraint, Date, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 import pytz
@@ -26,7 +26,7 @@ class DwhTennisCourt(Base):
     __table_args__ = {'schema': 'dwh'}
 
     id = Column(Integer, primary_key=True)
-    court_id = Column(String(50), nullable=False, unique=True)
+    park_id = Column(String(50), nullable=False, unique=True)
     park_name = Column(String(500), nullable=False)
     park_details = Column(Text, nullable=True)
     address = Column(String(500), nullable=True)
@@ -45,7 +45,7 @@ class StagingTennisCourt(Base):
     __table_args__ = {'schema': 'staging'}
 
     id = Column(Integer, primary_key=True)
-    court_id = Column(String(50), nullable=False)
+    park_id = Column(String(50), nullable=False)
     park_name = Column(String(500), nullable=False)
     park_details = Column(Text, nullable=True)
     address = Column(String(500), nullable=True)
@@ -61,17 +61,18 @@ class StagingTennisCourt(Base):
 class DwhCourtAvailability(Base):
     __tablename__ = 'court_availability'
     __table_args__ = (
-        UniqueConstraint('court_id', 'date', 'time', 'court', name='uix_court_availability'),
+        UniqueConstraint('park_id', 'court_id', 'date', 'time', name='uix_court_availability'),
         {'schema': 'dwh'}
     )
 
     id = Column(Integer, primary_key=True)
-    court_id = Column(String(50), ForeignKey('dwh.tennis_courts.court_id'), nullable=False)
+    park_id = Column(String(50), ForeignKey('dwh.tennis_courts.park_id'), nullable=False)
+    court_id = Column(String(50), nullable=False)
     date = Column(Date, nullable=False)  # Changed to Date type
     time = Column(String(50), nullable=False)
-    court = Column(String(50), nullable=False)
     status = Column(String(50), nullable=False)
     reservation_link = Column(String(500), nullable=True)
+    is_available = Column(Boolean, nullable=False, default=False)
     last_updated = Column(DateTime(timezone=True), default=get_et_time)
 
 class StagingCourtAvailability(Base):
@@ -79,10 +80,11 @@ class StagingCourtAvailability(Base):
     __table_args__ = {'schema': 'staging'}
 
     id = Column(Integer, primary_key=True)
-    court_id = Column(String(50), ForeignKey('dwh.tennis_courts.court_id'), nullable=False)
+    park_id = Column(String(50), ForeignKey('dwh.tennis_courts.park_id'), nullable=False)
+    court_id = Column(String(50), nullable=False)
     date = Column(Date, nullable=False)  # Changed to Date type
     time = Column(String(50), nullable=False)
-    court = Column(String(50), nullable=False)
     status = Column(String(50), nullable=False)
     reservation_link = Column(String(500), nullable=True)
+    is_available = Column(Boolean, nullable=False, default=False)
     file_id = Column(Integer, ForeignKey('raw_files.file_registry.id'), nullable=False) 

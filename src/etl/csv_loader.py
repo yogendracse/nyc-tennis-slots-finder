@@ -121,17 +121,13 @@ def validate_court_data(df):
 def validate_availability_data(df):
     """Validate availability data before loading."""
     # Check required columns
-    required_columns = ['court_id', 'date', 'time', 'court', 'status']
+    required_columns = ['park_id', 'date', 'time', 'court_id', 'status', 'reservation_link', 'is_available']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
 
-    # Validate dates are in the future
-    today = datetime.now().date()
+    # Convert dates to datetime
     df['date'] = pd.to_datetime(df['date']).dt.date
-    past_dates = df[df['date'] < today]
-    if not past_dates.empty:
-        raise ValueError(f"Found availability records with past dates: {past_dates['date'].unique().tolist()}")
 
     # Validate time format (HH:MM a.m./p.m.)
     def is_valid_time(time_str):
@@ -153,6 +149,11 @@ def validate_availability_data(df):
     if not invalid_times.empty:
         raise ValueError(f"Invalid time format found: {invalid_times['time'].unique().tolist()}")
 
+    # Validate that all slots are available
+    unavailable_slots = df[~df['is_available']]
+    if not unavailable_slots.empty:
+        raise ValueError("Found unavailable slots in the data. Only available slots should be included.")
+
 def load_courts_to_staging(df, session):
     """Load tennis courts data to staging table."""
     try:
@@ -165,7 +166,7 @@ def load_courts_to_staging(df, session):
         # Load data to staging
         for _, row in df.iterrows():
             court = StagingTennisCourt(
-                court_id=str(row['court_id']),
+                park_id=str(row['court_id']),  # The CSV still has court_id column, but we store it as park_id
                 park_name=row['park_name'],
                 park_details=row.get('park_details'),
                 address=row.get('address'),
@@ -194,7 +195,7 @@ def merge_courts_to_dwh(session):
         # Update or insert records
         for staging_court in staging_data:
             dwh_court = session.query(DwhTennisCourt).filter_by(
-                court_id=staging_court.court_id
+                park_id=staging_court.park_id
             ).first()
 
             if dwh_court:
@@ -206,7 +207,7 @@ def merge_courts_to_dwh(session):
             else:
                 # Insert new record
                 dwh_court = DwhTennisCourt(
-                    court_id=staging_court.court_id,
+                    park_id=staging_court.park_id,
                     park_name=staging_court.park_name,
                     park_details=staging_court.park_details,
                     address=staging_court.address,
@@ -233,18 +234,22 @@ def load_availability_to_staging(file_path, file_id, session):
         df = pd.read_csv(file_path)
         validate_availability_data(df)
 
+        # Clean NaN values
+        df['reservation_link'] = df['reservation_link'].fillna('')
+
         # Clear staging table
         session.query(StagingCourtAvailability).delete()
 
         # Load data to staging
         for _, row in df.iterrows():
             availability = StagingCourtAvailability(
+                park_id=str(row['park_id']),
                 court_id=str(row['court_id']),
                 date=row['date'],
                 time=row['time'],
-                court=row['court'],
                 status=row['status'],
-                reservation_link=row.get('reservation_link'),
+                reservation_link=row['reservation_link'] if row['reservation_link'] else None,
+                is_available=row['is_available'],
                 file_id=file_id
             )
             session.add(availability)
@@ -265,10 +270,10 @@ def merge_availability_to_dwh(session):
         # Update or insert records
         for staging_slot in staging_data:
             dwh_slot = session.query(DwhCourtAvailability).filter_by(
+                park_id=staging_slot.park_id,
                 court_id=staging_slot.court_id,
                 date=staging_slot.date,
-                time=staging_slot.time,
-                court=staging_slot.court
+                time=staging_slot.time
             ).first()
 
             if dwh_slot:
@@ -279,12 +284,13 @@ def merge_availability_to_dwh(session):
             else:
                 # Insert new record
                 dwh_slot = DwhCourtAvailability(
+                    park_id=staging_slot.park_id,
                     court_id=staging_slot.court_id,
                     date=staging_slot.date,
                     time=staging_slot.time,
-                    court=staging_slot.court,
                     status=staging_slot.status,
-                    reservation_link=staging_slot.reservation_link
+                    reservation_link=staging_slot.reservation_link,
+                    is_available=staging_slot.is_available
                 )
                 session.add(dwh_slot)
 

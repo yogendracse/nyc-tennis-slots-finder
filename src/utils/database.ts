@@ -22,7 +22,7 @@ export async function query(text: string, params?: any[]) {
 
 // Tennis court types
 export interface TennisCourt {
-  court_id: string;
+  park_id: string;  // Changed from court_id to park_id
   park_name: string;
   park_details?: string;
   address: string;
@@ -37,19 +37,20 @@ export interface TennisCourt {
 }
 
 export interface CourtAvailability {
-  court_id: string;
+  park_id: string;  // Changed from court_id to park_id
+  court_id: string; // Added court_id for individual courts within a park
   date: string;
   time: string;
-  court: string;
   status: string;
   reservation_link?: string;
+  is_available: boolean; // Added is_available field
 }
 
 // Helper functions for common queries
 export async function getAllCourts(): Promise<TennisCourt[]> {
   const result = await query(`
     SELECT 
-      court_id,
+      park_id,
       park_name,
       park_details,
       address,
@@ -74,25 +75,26 @@ export async function getAllCourts(): Promise<TennisCourt[]> {
 }
 
 export async function getCourtAvailability(
-  courtId: string,
+  parkId: string,
   date: string
 ): Promise<CourtAvailability[]> {
   return query(`
     SELECT 
-      court_id, 
+      park_id, 
+      court_id,
       date, 
       time,
-      court,
       status,
-      reservation_link
+      reservation_link,
+      is_available
     FROM dwh.court_availability
     WHERE 
-      court_id = $1 
+      park_id = $1 
       AND date = $2
-      AND status = 'Reserve this time'
+      AND is_available = true
       AND reservation_link IS NOT NULL
     ORDER BY 
-      court,
+      court_id,
       CASE 
         WHEN time LIKE '%a.m.' THEN 0
         WHEN time LIKE '%p.m.' THEN 1
@@ -101,7 +103,7 @@ export async function getCourtAvailability(
         WHEN time LIKE '12:%' THEN 0
         ELSE CAST(SUBSTRING(time FROM '^[0-9]+') AS INTEGER)
       END
-  `, [courtId, date]);
+  `, [parkId, date]);
 }
 
 export async function getLatestAvailabilityUpdate(): Promise<Date | null> {

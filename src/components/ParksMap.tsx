@@ -30,7 +30,7 @@ interface SlotSummary {
 interface ParksMapProps {
   courts: TennisCourt[];
   selectedDate: Date;
-  onParkClick: (courtId: string) => void;
+  onParkClick: (parkId: string) => void;
 }
 
 function getSlotSummary(slots: TimeSlot[]): SlotSummary {
@@ -97,13 +97,13 @@ export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMap
     const fetchAvailability = async () => {
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const availabilityPromises = courts.map(async (court) => {
-        const response = await fetch(`/api/courts?courtId=${court.court_id}&date=${dateStr}`);
+        const response = await fetch(`/api/courts?parkId=${court.park_id}&date=${dateStr}`);
         const data: CourtAvailability[] = await response.json();
         return {
-          courtId: court.court_id,
+          parkId: court.park_id,
           slots: data.map(slot => ({
             time: slot.time,
-            court: slot.court,
+            court: slot.court_id,
             status: slot.status,
             reservation_link: slot.reservation_link
           }))
@@ -111,8 +111,8 @@ export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMap
       });
 
       const results = await Promise.all(availabilityPromises);
-      const availabilityMap = results.reduce((acc, { courtId, slots }) => {
-        acc[courtId] = slots;
+      const availabilityMap = results.reduce((acc, { parkId, slots }) => {
+        acc[parkId] = slots;
         return acc;
       }, {} as Record<string, TimeSlot[]>);
       
@@ -170,16 +170,16 @@ export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMap
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {validCourts.map((court) => {
-          const slots = availabilityData[court.court_id] || [];
+          const slots = availabilityData[court.park_id] || [];
           const summary = getSlotSummary(slots);
 
           return (
             <Marker
-              key={court.court_id}
+              key={court.park_id}
               position={[court.lat, court.lon]}
               icon={customIcon}
               eventHandlers={{
-                click: () => handleMarkerClick(court.court_id),
+                click: () => handleMarkerClick(court.park_id),
               }}
             >
               <Popup>
@@ -216,7 +216,7 @@ export default function ParksMap({ courts, selectedDate, onParkClick }: ParksMap
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      onParkClick(court.court_id);
+                      onParkClick(court.park_id);
                     }}
                     className="mt-3 w-full text-xs bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded transition-colors"
                   >

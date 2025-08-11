@@ -74,7 +74,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [courts, setCourts] = useState<TennisCourt[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
+  const [selectedParkId, setSelectedParkId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [courtAvailability, setCourtAvailability] = useState<Record<string, CourtAvailability[]>>({});
   const mapRef = useRef<HTMLDivElement>(null);
@@ -86,10 +86,10 @@ export default function Home() {
     }
   };
 
-  const handleCourtClick = (courtId: string) => {
-    setSelectedCourtId(courtId);
+  const handleCourtClick = (parkId: string) => {
+    setSelectedParkId(parkId);
     // Scroll to the court's section
-    const courtElement = document.getElementById(`court-${courtId}`);
+    const courtElement = document.getElementById(`court-${parkId}`);
     if (courtElement) {
       courtElement.scrollIntoView({ behavior: 'smooth' });
     }
@@ -120,19 +120,19 @@ export default function Home() {
       // Fetch availability for filtered courts
       const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const availabilityPromises = filteredCourts.map(async (court) => {
-        const response = await fetch(`/api/courts?courtId=${court.court_id}&date=${dateStr}`);
+        const response = await fetch(`/api/courts?parkId=${court.park_id}&date=${dateStr}`);
         const data: CourtAvailability[] = await response.json();
         
         // Filter slots based on time preference
         const filteredData = data.filter(slot => isTimeInPreference(slot.time, timePreference));
         
-        return { courtId: court.court_id, availability: filteredData };
+        return { parkId: court.park_id, availability: filteredData };
       });
 
       const results = await Promise.all(availabilityPromises);
-      const availabilityMap = results.reduce((acc, { courtId, availability }) => {
+      const availabilityMap = results.reduce((acc, { parkId, availability }) => {
         if (availability.length > 0) { // Only include courts with available slots
-          acc[courtId] = availability;
+          acc[parkId] = availability;
         }
         return acc;
       }, {} as Record<string, CourtAvailability[]>);
@@ -278,22 +278,22 @@ export default function Home() {
         {/* Results */}
         <div ref={resultsRef} className="space-y-8">
           {courts.map((court) => {
-            const availableSlots = courtAvailability[court.court_id] || [];
+            const availableSlots = courtAvailability[court.park_id] || [];
             
             // Skip courts with no available slots
             if (availableSlots.length === 0) return null;
 
             return (
               <div 
-                key={court.court_id} 
-                id={`court-${court.court_id}`}
+                key={court.park_id} 
+                id={`court-${court.park_id}`}
                 className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300 ${
-                  selectedCourtId === court.court_id ? 'ring-2 ring-blue-500' : ''
+                  selectedParkId === court.park_id ? 'ring-2 ring-blue-500' : ''
                 }`}
               >
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                   <h3 className="text-xl font-semibold text-gray-900">
-                    Park Name: {court.court_id} : {court.park_name}
+                    Park Name: {court.park_id} : {court.park_name}
                   </h3>
                   <div className="mt-1 space-y-1">
                     <p className="text-sm text-gray-600">{court.park_details}</p>
@@ -317,15 +317,15 @@ export default function Home() {
                   <div className="space-y-4">
                     {Object.entries(
                       availableSlots.reduce((acc, slot) => {
-                        if (!acc[slot.court]) {
-                          acc[slot.court] = [];
+                        if (!acc[slot.court_id]) {
+                          acc[slot.court_id] = [];
                         }
-                        acc[slot.court].push(slot);
+                        acc[slot.court_id].push(slot);
                         return acc;
                       }, {} as Record<string, typeof availableSlots>)
                     ).map(([courtName, slots]) => (
                       <div key={courtName} className="border-t pt-4 first:border-t-0 first:pt-0">
-                        <h5 className="font-medium text-gray-700 mb-2">{courtName}</h5>
+                        <h5 className="font-medium text-gray-700 mb-2">Court {courtName}</h5>
                         <div className="flex flex-wrap gap-2">
                           {slots.map((slot, index) => (
                             <a
