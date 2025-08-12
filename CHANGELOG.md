@@ -5,6 +5,22 @@ All notable changes to the NYC Tennis Slots Finder project will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-08-11
+
+### Added
+- **Manual ETL Refresh Page**: New admin page at `/etl-refresh` for manually triggering data refresh
+- **Manual Data Scraping**: Button to manually scrape tennis court availability from NYC Parks
+- **CSV Generation**: Automatic CSV file creation with timestamps for manual ETL runs
+- **Real-time Status Updates**: Live status display showing ETL process progress and results
+- **Park Availability Comparison Table**: Before/after comparison showing data changes
+- **Data Status Monitoring**: File information, age tracking, and processing history
+- **Admin API Endpoints**: New endpoints for ETL refresh, status, and park availability
+
+### Changed
+- Enhanced ETL pipeline with manual trigger capabilities
+- Improved data monitoring and visualization for administrators
+- Better integration with existing scraper and ETL infrastructure
+
 ## [Unreleased]
 
 ### Added
@@ -12,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Distance-based sorting of tennis courts
 - Enhanced UI/UX with prominent input styling
 
-## [1.1.0] - 2025-01-XX
+## [1.1.0] - 2025-08-11
 
 ### 🆕 Added
 - **Location-Based Features**
