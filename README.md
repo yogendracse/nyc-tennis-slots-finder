@@ -19,6 +19,11 @@ Find available tennis courts across NYC parks in one place.
 - Filter by court type (Hard, Clay)
 - Direct links to reserve available slots
 
+### 🛠️ Admin Features
+- **Manual ETL Refresh** (`/etl-refresh`) - Admin page for manually triggering data refresh outside the hourly schedule
+- **Data Comparison Table** - Shows before/after availability counts for all parks
+- **Real-time Status Updates** - Live feedback on ETL process progress and completion
+
 ### 🆕 Location-Based Features (v1.1.0)
 - **Smart Location Input**: Enter ZIP codes, addresses, or use current geolocation
 - **Distance-Based Sorting**: Courts automatically sorted by proximity to your location
@@ -50,10 +55,10 @@ The application uses a three-layer data architecture:
    - Merge into DWH with court types and timestamps
 
 2. Availability Data (Periodic updates):
-   - Download availability CSVs
-   - Register files in `raw_files.file_registry`
-   - Load into staging with file references
-   - Merge into DWH with timestamps
+   - **Automated (Hourly)**: Scheduled ETL process runs every hour via cron
+   - **Manual (On-demand)**: Admin can trigger refresh via `/etl-refresh` page
+   - Process: Scrape data → Generate CSV → Load to staging → Merge to DWH
+   - File tracking in `raw_files.file_registry` with status monitoring
 
 ### Data Validation & Cleanup
 
@@ -101,6 +106,28 @@ The application uses a three-layer data architecture:
 - **Addresses**: Use full street addresses for precise results
 - **Geolocation**: Most accurate for current location (requires browser permission)
 - **Enter Key**: Press Enter after typing to quickly set location
+
+### 🛠️ Admin Operations
+
+#### Manual Data Refresh
+1. **Navigate to** `/etl-refresh` page
+2. **Click "Refresh Data Now"** to trigger manual data collection
+3. **Monitor progress** with real-time status updates
+4. **Review results** in the comparison table showing before/after availability counts
+5. **Verify changes** in the data status panel
+
+**Note**: Manual refresh is useful when you need fresh data outside the hourly automated schedule.
+
+## 🔌 API Endpoints
+
+### Public APIs
+- **`/api/courts`** - Get all tennis courts or specific court availability
+- **`/api/geocode`** - Geocode addresses/ZIP codes to coordinates
+
+### Admin APIs
+- **`/api/etl-refresh`** - Trigger manual data refresh (POST)
+- **`/api/etl-status`** - Get current ETL status and file information (GET)
+- **`/api/park-availability`** - Get availability counts for all parks (GET)
 
 ## Development Setup
 
