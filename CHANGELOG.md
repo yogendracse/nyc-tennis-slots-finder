@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Manual ETL Refresh Page**: New admin page at `/etl-refresh` for manually triggering data refresh
+- **Manual Data Scraping**: Button to manually scrape tennis court availability from NYC Parks
+- **CSV Generation**: Automatic CSV file creation with timestamps for manual ETL runs
+- **Real-time Status Updates**: Live status display showing ETL process progress and results
 - Location-based court finding functionality
 - Distance-based sorting of tennis courts
 - Enhanced UI/UX with prominent input styling
 
-## [1.1.0] - 2025-01-XX
+## [1.1.0] - 2025-08-11
 
 ### 🆕 Added
 - **Location-Based Features**
