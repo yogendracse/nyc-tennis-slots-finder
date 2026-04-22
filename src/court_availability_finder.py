@@ -4,11 +4,43 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 from pathlib import Path
+from requests import Response
 
 # Constants
 BASE_URL = "https://www.nycgovparks.org/tennisreservation"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "court_availability", "raw_files")
 DEFAULT_COURTS_FILE = os.path.join(os.path.dirname(__file__), "..", "nyc_tennis_courts.csv")
+
+REQUEST_TIMEOUT_SECONDS = 30
+
+def request_with_network_fallback(url: str, headers: dict, referer: str | None = None) -> Response:
+    """Request URL with both direct and env-proxy network modes."""
+    modes = (
+        (False, "direct"),
+        (True, "env-proxy"),
+    )
+    last_error: Exception | None = None
+
+    for trust_env, mode_name in modes:
+        session = requests.Session()
+        session.trust_env = trust_env
+        request_headers = dict(headers)
+        if referer:
+            request_headers['Referer'] = referer
+        try:
+            # Prime session cookie then request target URL.
+            session.get(BASE_URL, headers=request_headers, timeout=REQUEST_TIMEOUT_SECONDS)
+            response = session.get(url, headers=request_headers, timeout=REQUEST_TIMEOUT_SECONDS)
+            return response
+        except requests.RequestException as error:
+            print(f"  - Network mode '{mode_name}' failed for {url}: {error}")
+            last_error = error
+        finally:
+            session.close()
+
+    if last_error:
+        raise last_error
+    raise RuntimeError(f"Failed to request {url} using all network modes")
 
 def get_court_id_from_url(url: str) -> str:
     """Extract court ID from facility URL."""
@@ -127,9 +159,6 @@ def get_available_dates(html: str) -> dict[str, str]:
 
 def get_availability_data(court_id: str) -> list[dict]:
     """Get availability data for a specific court."""
-    # Create a session to maintain cookies
-    session = requests.Session()
-    
     # Common headers
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -139,13 +168,9 @@ def get_availability_data(court_id: str) -> list[dict]:
         'Upgrade-Insecure-Requests': '1'
     }
     
-    # First visit the main page to get a session cookie
-    session.get(BASE_URL, headers=headers)
-    
     # Then visit the availability page
     url = f"{BASE_URL}/availability/{court_id}"
-    headers['Referer'] = BASE_URL
-    response = session.get(url, headers=headers)
+    response = request_with_network_fallback(url, headers, referer=BASE_URL)
     
     # Check if we got a valid response
     if response.status_code != 200:
