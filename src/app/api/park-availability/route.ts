@@ -4,6 +4,37 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 
 const execAsync = promisify(exec);
+const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy'
+];
+
+function isLoopbackProxyValue(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname);
+  } catch {
+    return value.includes('127.0.0.1') || value.includes('localhost');
+  }
+}
+
+function getCleanPythonEnv(projectRoot: string): NodeJS.ProcessEnv {
+  const cleanEnv: NodeJS.ProcessEnv = { ...process.env, PYTHONPATH: projectRoot };
+  for (const key of PROXY_ENV_KEYS) {
+    if (isLoopbackProxyValue(cleanEnv[key])) {
+      delete cleanEnv[key];
+    }
+  }
+  return cleanEnv;
+}
 
 interface ParkAvailability {
   park_id: string;
@@ -132,7 +163,7 @@ if __name__ == "__main__":
       const pythonProcess = spawn(pythonCommand, args, {
         cwd: projectRoot,
         stdio: 'pipe',
-        env: { ...process.env, PYTHONPATH: projectRoot }
+        env: getCleanPythonEnv(projectRoot)
       });
 
       let stdout = '';

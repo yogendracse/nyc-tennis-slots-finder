@@ -4,6 +4,37 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 
 const execAsync = promisify(exec);
+const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy'
+];
+
+function isLoopbackProxyValue(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname);
+  } catch {
+    return value.includes('127.0.0.1') || value.includes('localhost');
+  }
+}
+
+function getCleanPythonEnv(projectRoot: string): NodeJS.ProcessEnv {
+  const cleanEnv: NodeJS.ProcessEnv = { ...process.env, PYTHONPATH: projectRoot };
+  for (const key of PROXY_ENV_KEYS) {
+    if (isLoopbackProxyValue(cleanEnv[key])) {
+      delete cleanEnv[key];
+    }
+  }
+  return cleanEnv;
+}
 
 export async function POST() {
   try {
@@ -34,7 +65,7 @@ export async function POST() {
       const pythonProcess = spawn(pythonCommand, args, {
         cwd: projectRoot,
         stdio: 'pipe',
-        env: { ...process.env, PYTHONPATH: projectRoot }
+        env: getCleanPythonEnv(projectRoot)
       });
 
       let stdout = '';
@@ -52,6 +83,19 @@ export async function POST() {
         if (code === 0) {
           // Parse the stdout to extract useful information
           const output = stdout.trim();
+          const collectedNoData =
+            output.includes('No availability data collected!') ||
+            output.includes('Total available slots collected: 0');
+
+          if (collectedNoData) {
+            resolve({
+              success: false,
+              message: 'ETL completed but collected no availability data',
+              error: output || 'No availability data collected'
+            });
+            return;
+          }
+
           let details = '';
           
           // Look for specific patterns in the output
